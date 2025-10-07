@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WebRTC Viewer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 16px; background: #0b0c10; color: #e5e7eb; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; cursor: pointer; }
+    button:hover { background: #1f2937; }
+    #status { padding: 6px 10px; border-radius: 6px; background: #111827; border: 1px solid #374151; }
+    .main-content { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+    .video-container { flex: 1; min-width: 320px; }
+    video { width: 100%; max-width: 960px; background: #111; border-radius: 12px; border: 1px solid #374151; }
+    .stats-panel { width: 320px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 16px; }
+    .stats-panel h3 { margin: 0 0 12px 0; font-size: 18px; color: #60a5fa; }
+    .stat-group { margin-bottom: 16px; }
+    .stat-group h4 { margin: 0 0 8px 0; font-size: 14px; color: #9ca3af; text-transform: uppercase; }
+    .stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+    .stat-label { color: #9ca3af; }
+    .stat-value { color: #e5e7eb; font-weight: 500; }
+    pre { background: #111827; padding: 8px; border-radius: 8px; overflow: auto; border: 1px solid #374151; max-height: 30vh; }
+    .muted { opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <h1>WebRTC Viewer</h1>
+
+  <div class="row" style="margin-bottom:12px">
+    <button id="btnConnect">Connect</button>
+    <button id="btnDisconnect">Disconnect</button>
+    <span id="status">idle</span>
+  </div>
+
+  <div class="main-content">
+    <div class="video-container">
+      <video id="video" autoplay playsinline muted class="muted" controls></video>
+    </div>
+    
+    <div class="stats-panel">
+      <h3>Stream Statistics</h3>
+      
+      <div class="stat-group">
+        <h4>Video</h4>
+        <div class="stat-row">
+          <span class="stat-label">Resolution:</span>
+          <span class="stat-value" id="statResolution">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Frame Rate:</span>
+          <span class="stat-value" id="statFrameRate">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Bitrate:</span>
+          <span class="stat-value" id="statBitrate">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Codec:</span>
+          <span class="stat-value" id="statCodec">—</span>
+        </div>
+      </div>
+
+      <div class="stat-group">
+        <h4>Connection</h4>
+        <div class="stat-row">
+          <span class="stat-label">State:</span>
+          <span class="stat-value" id="statConnState">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">ICE State:</span>
+          <span class="stat-value" id="statIceState">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Packets Lost:</span>
+          <span class="stat-value" id="statPacketsLost">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Jitter:</span>
+          <span class="stat-value" id="statJitter">—</span>
+        </div>
+      </div>
+
+      <div class="stat-group">
+        <h4>Network</h4>
+        <div class="stat-row">
+          <span class="stat-label">Bytes Received:</span>
+          <span class="stat-value" id="statBytesReceived">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Packets Received:</span>
+          <span class="stat-value" id="statPacketsReceived">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Logs</h3>
+  <pre id="log"></pre>
+
+<script>
+(() => {
+  const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + '192.168.25.90' + ':8080/';
+
+  /*** UI ***/
+  const $video = document.getElementById('video');
+  const $status = document.getElementById('status');
+  const $log = document.getElementById('log');
+  const $btnConnect = document.getElementById('btnConnect');
+  const $btnDisconnect = document.getElementById('btnDisconnect');
+
+  // Stats UI elements
+  const $statResolution = document.getElementById('statResolution');
+  const $statFrameRate = document.getElementById('statFrameRate');
+  const $statBitrate = document.getElementById('statBitrate');
+  const $statCodec = document.getElementById('statCodec');
+  const $statConnState = document.getElementById('statConnState');
+  const $statIceState = document.getElementById('statIceState');
+  const $statPacketsLost = document.getElementById('statPacketsLost');
+  const $statJitter = document.getElementById('statJitter');
+  const $statBytesReceived = document.getElementById('statBytesReceived');
+  const $statPacketsReceived = document.getElementById('statPacketsReceived');
+
+  function log(...args) {
+    const line = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+    console.log('[viewer]', ...args);
+    $log.textContent += line + '\n';
+    $log.scrollTop = $log.scrollHeight;
+  }
+
+  function updateStatus(txt) {
+    $status.textContent = txt;
+  }
+
+  /*** State ***/
+  let ws = null;
+  let pc = null;
+  let remoteStream = null;
+  let myId = null;
+  let remoteId = null;
+  let srcSet = false;
+  let playPending = null;
+  let statsInterval = null;
+  let lastBytesReceived = 0;
+  let lastTimestamp = 0;
+
+  /*** Stats Collection ***/
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  function formatBitrate(bps) {
+    if (bps === 0) return '0 bps';
+    const k = 1000;
+    const sizes = ['bps', 'Kbps', 'Mbps'];
+    const i = Math.floor(Math.log(bps) / Math.log(k));
+    return parseFloat((bps / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  async function updateStats() {
+    if (!pc || pc.connectionState !== 'connected') return;
+
+    try {
+      const stats = await pc.getStats();
+      let videoStats = null;
+      let codecInfo = null;
+
+      stats.forEach(report => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          videoStats = report;
+        }
+      });
+
+      // Find codec info after we have videoStats
+      if (videoStats && videoStats.codecId) {
+        stats.forEach(report => {
+          if (report.type === 'codec' && report.id === videoStats.codecId) {
+            codecInfo = report;
+          }
+        });
+      }
+
+      if (videoStats) {
+        // Resolution
+        if (videoStats.frameWidth && videoStats.frameHeight) {
+          $statResolution.textContent = `${videoStats.frameWidth}×${videoStats.frameHeight}`;
+        }
+
+        // Frame rate
+        if (videoStats.framesPerSecond) {
+          $statFrameRate.textContent = `${videoStats.framesPerSecond.toFixed(1)} fps`;
+        }
+
+        // Bitrate calculation
+        const currentBytes = videoStats.bytesReceived || 0;
+        const currentTime = videoStats.timestamp || 0;
+        
+        if (lastBytesReceived > 0 && lastTimestamp > 0) {
+          const bytesDiff = currentBytes - lastBytesReceived;
+          const timeDiff = (currentTime - lastTimestamp) / 1000; // Convert to seconds
+          if (timeDiff > 0) {
+            const bitrate = (bytesDiff * 8) / timeDiff;
+            $statBitrate.textContent = formatBitrate(bitrate);
+          }
+        }
+        
+        lastBytesReceived = currentBytes;
+        lastTimestamp = currentTime;
+
+        // Codec
+        if (codecInfo) {
+          $statCodec.textContent = codecInfo.mimeType ? codecInfo.mimeType.replace('video/', '') : '—';
+        }
+
+        // Packets lost
+        $statPacketsLost.textContent = videoStats.packetsLost || 0;
+
+        // Jitter
+        if (videoStats.jitter) {
+          $statJitter.textContent = `${(videoStats.jitter * 1000).toFixed(2)} ms`;
+        }
+
+        // Bytes received
+        $statBytesReceived.textContent = formatBytes(currentBytes);
+
+        // Packets received
+        $statPacketsReceived.textContent = videoStats.packetsReceived || 0;
+      }
+
+      // Connection states
+      $statConnState.textContent = pc.connectionState;
+      $statIceState.textContent = pc.iceConnectionState;
+
+    } catch (err) {
+      console.error('Error getting stats:', err);
+    }
+  }
+
+  function startStatsCollection() {
+    stopStatsCollection();
+    statsInterval = setInterval(updateStats, 1000);
+  }
+
+  function stopStatsCollection() {
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      statsInterval = null;
+    }
+    // Reset stats display
+    $statResolution.textContent = '—';
+    $statFrameRate.textContent = '—';
+    $statBitrate.textContent = '—';
+    $statCodec.textContent = '—';
+    $statConnState.textContent = '—';
+    $statIceState.textContent = '—';
+    $statPacketsLost.textContent = '—';
+    $statJitter.textContent = '—';
+    $statBytesReceived.textContent = '—';
+    $statPacketsReceived.textContent = '—';
+    lastBytesReceived = 0;
+    lastTimestamp = 0;
+  }
+
+  /*** Cleanup ***/
+  function cleanupPC() {
+    if (pc) {
+      try { pc.ontrack = null; } catch {}
+      try { pc.onicecandidate = null; } catch {}
+      try { pc.onconnectionstatechange = null; } catch {}
+      try { pc.onicegatheringstatechange = null; } catch {}
+      try { pc.close(); } catch {}
+      pc = null;
+    }
+    remoteStream = null;
+    srcSet = false;
+    playPending = null;
+    stopStatsCollection();
+  }
+
+  function cleanupMediaElement() {
+    try { $video.pause(); } catch {}
+    $video.srcObject = null;
+    $video.classList.add('muted');
+  }
+
+  function cleanupWS() {
+    if (ws) {
+      try { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; } catch {}
+      try { ws.close(); } catch {}
+      ws = null;
+    }
+  }
+
+  function fullCleanup() {
+    cleanupPC();
+    cleanupMediaElement();
+    cleanupWS();
+    myId = null;
+    remoteId = null;
+  }
+
+  /*** PeerConnection ***/
+  function setupPeerConnection() {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    remoteStream = new MediaStream();
+    srcSet = false;
+    playPending = null;
+
+    pc.ontrack = (ev) => {
+      const track = ev.track;
+      log('✓ Received track:', track.kind, 'readyState:', track.readyState);
+
+      // Always add to a single persistent stream
+      remoteStream.addTrack(track);
+
+      // Set srcObject exactly once per connection
+      if (!srcSet) {
+        srcSet = true;
+        $video.srcObject = remoteStream;
+
+        // Defer play() so both audio+video can arrive first
+        queueMicrotask(() => {
+          if (!playPending) {
+            playPending = $video.play().then(() => {
+              log('✓ Video playing (autoplay)');
+              $video.classList.remove('muted');
+            }).catch(err => {
+              log('✗ Video play failed (will retry on canplay):', err.name, err.message);
+            });
+          }
+        });
+      }
+    };
+
+    // Retry play if the first attempt was interrupted
+    $video.addEventListener('canplay', () => {
+      if ($video.paused) {
+        $video.play().then(() => {
+          log('✓ Video playing (canplay retry)');
+          $video.classList.remove('muted');
+        }).catch(() => {});
+      }
+    }, { once: false });
+
+    // iOS sometimes pauses on background
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && $video.paused) {
+        $video.play().catch(() => {});
+      }
+    });
+
+    pc.onicecandidate = (ev) => {
+      if (ev.candidate && ws && ws.readyState === WebSocket.OPEN) {
+        const msg = {
+          type: 'ice-candidate',
+          to: remoteId || undefined,
+          candidate: {
+            candidate: ev.candidate.candidate,
+            sdpMLineIndex: ev.candidate.sdpMLineIndex
+            // omit sdpMid to avoid mismatches across renegotiations
+          }
+        };
+        ws.send(JSON.stringify(msg));
+        log('Generated ICE candidate:', ev.candidate.candidate);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      log('Connection state:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        updateStatus('connected');
+        log('✓ WebRTC connection established');
+        startStatsCollection();
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        updateStatus(pc.connectionState);
+        stopStatsCollection();
+      }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      log('ICE gathering state:', pc.iceGatheringState);
+    };
+
+    return pc;
+  }
+
+  /*** WebSocket ***/
+  function connectWS() {
+    cleanupWS();
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      log('WebSocket connected');
+      updateStatus('ws:open');
+    };
+
+    ws.onclose = () => {
+      log('WebSocket disconnected');
+      updateStatus('ws:closed');
+    };
+
+    ws.onerror = (e) => {
+      log('WebSocket error:', e.message || e);
+      updateStatus('ws:error');
+    };
+
+    ws.onmessage = async (ev) => {
+      let data = null;
+      try { data = JSON.parse(ev.data); } catch { return; }
+
+      log('Received:', data.type);
+
+      switch (data.type) {
+        case 'registered': {
+          myId = data.id;
+          log('My ID:', myId);
+
+          // New PC per connection lifecycle
+          cleanupPC();
+          cleanupMediaElement();
+          setupPeerConnection();
+
+          // Ask the sender to create an offer
+          ws.send(JSON.stringify({ type: 'request-offer' }));
+          log('request-offer sent');
+          break;
+        }
+
+        case 'offer': {
+          // server may broadcast offers; pick the sender advertised in 'from'
+          remoteId = data.from || remoteId;
+          log('Handling offer from:', remoteId);
+
+          if (!pc) setupPeerConnection();
+
+          await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+          log('✓ Remote description set');
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          log('✓ Local description set');
+
+          ws.send(JSON.stringify({ type: 'answer', to: remoteId, sdp: answer.sdp }));
+          log('✓ Answer sent');
+          break;
+        }
+
+        case 'ice-candidate': {
+          if (data.candidate && pc) {
+            try {
+              await pc.addIceCandidate({
+                candidate: data.candidate.candidate,
+                sdpMLineIndex: data.candidate.sdpMLineIndex
+                // omit sdpMid on purpose
+              });
+              log('✓ Added ICE candidate');
+            } catch (e) {
+              log('✗ addIceCandidate error:', e);
+            }
+          }
+          break;
+        }
+
+        case 'peer-left': {
+          if (remoteId && data.id === remoteId) {
+            log('Peer left:', remoteId);
+            // full reset so the next connect is clean
+            cleanupPC();
+            cleanupMediaElement();
+            remoteId = null;
+            updateStatus('peer-left');
+          }
+          break;
+        }
+
+        default:
+          // ignore
+          break;
+      }
+    };
+  }
+
+  /*** Buttons ***/
+  $btnConnect.addEventListener('click', () => {
+    fullCleanup();          // ensure pristine state
+    connectWS();
+    updateStatus('connecting');
+  });
+
+  $btnDisconnect.addEventListener('click', () => {
+    fullCleanup();
+    updateStatus('disconnected');
+  });
+
+  // Optional: auto-connect on page load
+  // connectWS();
+})();
+</script>
+</body>
+</html>
