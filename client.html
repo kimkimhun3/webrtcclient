@@ -1,0 +1,1430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Adaptive WebRTC Viewer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; 
+      padding: 20px; 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    
+    .container { max-width: 1200px; margin: 0 auto; }
+    
+    h1 { 
+      font-size: 28px; 
+      margin-bottom: 24px; 
+      display: flex; 
+      align-items: center; 
+      gap: 12px;
+      color: #f1f5f9;
+    }
+    
+    .badge { 
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px; 
+      border-radius: 8px; 
+      font-size: 12px; 
+      font-weight: 600; 
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-lan { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+    .badge-internet { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+    
+    .card {
+      background: rgba(30, 41, 59, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+    
+    .card h3 { 
+      font-size: 16px; 
+      margin-bottom: 16px; 
+      color: #60a5fa;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .mode-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .mode-option {
+      position: relative;
+      cursor: pointer;
+    }
+    
+    .mode-option input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .mode-label {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+      border: 2px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      transition: all 0.3s ease;
+    }
+    
+    .mode-option input[type="radio"]:checked + .mode-label {
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.1);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .mode-label-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    
+    .mode-label-icon { font-size: 24px; }
+    
+    .mode-label-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    .ip-config {
+      margin-top: 16px;
+      padding: 16px;
+      background: rgba(16, 185, 129, 0.05);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 12px;
+      display: none;
+    }
+
+    .ip-config.visible {
+      display: block;
+    }
+
+    .ip-config-title {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 12px;
+      color: #10b981;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ip-input-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      min-width: 200px;
+      padding: 10px 14px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.8);
+      color: #e2e8f0;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 13px;
+    }
+
+    input[type="text"]::placeholder {
+      color: #64748b;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+
+    .btn-detect {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-detect:hover:not(:disabled) {
+      background: rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-detect:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .ip-hint {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+    }
+    
+    .btn-secondary {
+      background: rgba(148, 163, 184, 0.1);
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(148, 163, 184, 0.2);
+    }
+    
+    .status {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .status-idle {
+      background: rgba(100, 116, 139, 0.2);
+      color: #94a3b8;
+      border: 1px solid rgba(100, 116, 139, 0.3);
+    }
+    
+    .status-connecting {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    .status-connected {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    
+    .video-container {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    video {
+      width: 100%;
+      display: block;
+      aspect-ratio: 16/9;
+    }
+
+    .stats-panel {
+      background: rgba(30, 41, 59, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 20px;
+      display: none;
+    }
+
+    .stats-panel.visible {
+      display: block;
+    }
+
+    .stats-panel h3 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #60a5fa;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-item {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 3px solid #3b82f6;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+
+    .stat-item.connection-type {
+      border-left-color: #10b981;
+    }
+
+    .stat-item.data-transfer {
+      border-left-color: #f59e0b;
+    }
+
+    .stat-item.packet-loss {
+      border-left-color: #ef4444;
+    }
+    
+    .log-container {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.8;
+      color: #cbd5e1;
+    }
+
+    .log-line {
+      margin: 4px 0;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(30, 41, 59, 0.4);
+      border-left: 3px solid transparent;
+      display: flex;
+      gap: 12px;
+    }
+
+    .log-line:hover {
+      background: rgba(30, 41, 59, 0.7);
+    }
+
+    .log-time {
+      color: #64748b;
+      font-weight: 600;
+      min-width: 85px;
+      flex-shrink: 0;
+    }
+
+    .log-message {
+      flex: 1;
+      color: #e2e8f0;
+    }
+
+    .log-line.log-success {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .log-line.log-success .log-message {
+      color: #6ee7b7;
+    }
+
+    .log-line.log-error {
+      border-left-color: #ef4444;
+      background: rgba(239, 68, 68, 0.05);
+    }
+
+    .log-line.log-error .log-message {
+      color: #fca5a5;
+    }
+
+    .log-line.log-warning {
+      border-left-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.05);
+    }
+
+    .log-line.log-warning .log-message {
+      color: #fcd34d;
+    }
+
+    .log-line.log-info {
+      border-left-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .log-line.log-info .log-message {
+      color: #93c5fd;
+    }
+
+    .log-line.log-section {
+      border-left-color: #8b5cf6;
+      background: rgba(139, 92, 246, 0.08);
+      font-weight: 600;
+    }
+
+    .log-line.log-section .log-message {
+      color: #c4b5fd;
+    }
+    
+    .log-container::-webkit-scrollbar { width: 8px; }
+    .log-container::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px; }
+    .log-container::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 4px; }
+    .log-container::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+    
+    .hint {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(59, 130, 246, 0.05);
+      border-left: 3px solid #3b82f6;
+      border-radius: 6px;
+      line-height: 1.6;
+    }
+    
+    @media (max-width: 768px) {
+      body { padding: 12px; }
+      h1 { 
+        font-size: 22px; 
+        flex-direction: column; 
+        align-items: flex-start; 
+        gap: 8px;
+      }
+      .mode-selector { grid-template-columns: 1fr; }
+      .controls { 
+        flex-direction: column; 
+        width: 100%; 
+      }
+      button { 
+        width: 100%; 
+        justify-content: center; 
+      }
+      .ip-input-group { 
+        flex-direction: column; 
+        align-items: stretch; 
+      }
+      input[type="text"] { 
+        width: 100%; 
+      }
+      .btn-detect { 
+        width: 100%; 
+      }
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      .card {
+        padding: 16px;
+      }
+      .log-line {
+        flex-direction: column;
+        gap: 4px;
+      }
+      .log-time {
+        min-width: auto;
+        font-size: 10px;
+      }
+      .log-message {
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      <span>Adaptive WebRTC Viewer</span>
+      <span class="badge badge-lan" id="modeBadge">🏠 LAN Mode</span>
+    </h1>
+
+    <div class="card">
+      <h3>🌐 Connection Mode</h3>
+      
+      <div class="mode-selector">
+        <div class="mode-option">
+          <input type="radio" id="modeLan" name="connectionMode" value="lan" checked>
+          <label for="modeLan" class="mode-label">
+            <div class="mode-label-header">
+              <span class="mode-label-icon">🏠</span>
+              <span>LAN Mode</span>
+            </div>
+            <div class="mode-label-desc">
+              Direct local network connection<br>
+              • Fastest performance<br>
+              • No external servers<br>
+              • Same network only
+            </div>
+          </label>
+        </div>
+        
+        <div class="mode-option">
+          <input type="radio" id="modeInternet" name="connectionMode" value="internet">
+          <label for="modeInternet" class="mode-label">
+            <div class="mode-label-header">
+              <span class="mode-label-icon">🌐</span>
+              <span>Internet Mode</span>
+            </div>
+            <div class="mode-label-desc">
+              Stream over public internet<br>
+              • Works across different networks<br>
+              • Uses TURN/STUN relay<br>
+              • Firewall/NAT traversal
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="ip-config visible" id="ipConfig">
+        <div class="ip-config-title">
+          🍎 mDNS Fix (Safari/iOS)
+        </div>
+        <div class="ip-input-group">
+          <input type="text" id="serverIpInput" placeholder="192.168.25.68" value="192.168.25.68" />
+          <button class="btn-detect" id="btnDetectIp">Auto-Detect</button>
+        </div>
+        <div class="ip-hint">
+          Safari/iOS uses .local domains (mDNS). Enter server's private IP to replace .local addresses in ICE candidates for direct LAN connection.
+        </div>
+      </div>
+      
+      <div class="hint" id="modeHint">
+        ✓ LAN Mode selected: Fast direct connection for devices on the same network
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <button id="btnConnect" class="btn-primary">
+          <span>▶</span> Connect
+        </button>
+        <button id="btnDisconnect" class="btn-secondary" disabled>
+          <span>⏸</span> Disconnect
+        </button>
+        <div class="status status-idle" id="status">
+          <span>●</span> Idle
+        </div>
+      </div>
+    </div>
+
+    <div class="video-container">
+      <video id="video" autoplay playsinline controls></video>
+    </div>
+
+    <div class="stats-panel" id="statsPanel">
+      <h3>📊 Connection Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat-item connection-type">
+          <div class="stat-label">Connection Type</div>
+          <div class="stat-value" id="statType">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Local IP</div>
+          <div class="stat-value" id="statLocalIp">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Remote IP</div>
+          <div class="stat-value" id="statRemoteIp">—</div>
+        </div>
+        <div class="stat-item data-transfer">
+          <div class="stat-label">Data Received</div>
+          <div class="stat-value" id="statDataReceived">0 MB</div>
+        </div>
+        <div class="stat-item packet-loss">
+          <div class="stat-label">Packets Lost</div>
+          <div class="stat-value" id="statPacketsLost">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Connection Time</div>
+          <div class="stat-value" id="statConnTime">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+      <h3>📋 Connection Logs</h3>
+      <div class="log-container" id="log"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':8080/ws';
+  
+  // DOM Elements
+  const $video = document.getElementById('video');
+  const $status = document.getElementById('status');
+  const $log = document.getElementById('log');
+  const $btnConnect = document.getElementById('btnConnect');
+  const $btnDisconnect = document.getElementById('btnDisconnect');
+  const $modeLan = document.getElementById('modeLan');
+  const $modeInternet = document.getElementById('modeInternet');
+  const $modeBadge = document.getElementById('modeBadge');
+  const $modeHint = document.getElementById('modeHint');
+  const $statsPanel = document.getElementById('statsPanel');
+  const $statType = document.getElementById('statType');
+  const $statLocalIp = document.getElementById('statLocalIp');
+  const $statRemoteIp = document.getElementById('statRemoteIp');
+  const $statDataReceived = document.getElementById('statDataReceived');
+  const $statPacketsLost = document.getElementById('statPacketsLost');
+  const $statConnTime = document.getElementById('statConnTime');
+  const $ipConfig = document.getElementById('ipConfig');
+  const $serverIpInput = document.getElementById('serverIpInput');
+  const $btnDetectIp = document.getElementById('btnDetectIp');
+
+  // State
+  let ws = null;
+  let pc = null;
+  let remoteStream = null;
+  let myId = null;
+  let connectStartTime = null;
+  let trackReceived = 0;
+  let pendingCandidates = [];
+  let statsInterval = null;
+  let isConnecting = false;
+  let reconnectTimeout = null;
+  let connectionAborted = false;
+
+  // Logging
+  function log(...args) {
+    const time = new Date().toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit', 
+      fractionalSecondDigits: 3 
+    });
+    
+    const message = args.map(a => 
+      typeof a === 'string' ? a : JSON.stringify(a)
+    ).join(' ');
+    
+    console.log('[viewer]', ...args);
+    
+    let logType = 'log-default';
+    if (message.includes('✓') || message.includes('Connected') || message.includes('success')) {
+      logType = 'log-success';
+    } else if (message.includes('✗') || message.includes('error') || message.includes('failed') || message.includes('Failed')) {
+      logType = 'log-error';
+    } else if (message.includes('⚠') || message.includes('warning') || message.includes('Queued')) {
+      logType = 'log-warning';
+    } else if (message.includes('→') || message.includes('Requested') || message.includes('Sending')) {
+      logType = 'log-info';
+    } else if (message.includes('═══') || message.includes('🎯') || message.includes('📊')) {
+      logType = 'log-section';
+    }
+    
+    const logLine = document.createElement('div');
+    logLine.className = `log-line ${logType}`;
+    
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'log-time';
+    timeSpan.textContent = time;
+    
+    const messageSpan = document.createElement('span');
+    messageSpan.className = 'log-message';
+    messageSpan.textContent = message;
+    
+    logLine.appendChild(timeSpan);
+    logLine.appendChild(messageSpan);
+    
+    $log.appendChild(logLine);
+    $log.scrollTop = $log.scrollHeight;
+  }
+
+  function updateStatus(txt, state = 'idle') {
+    const states = {
+      idle: { icon: '●', class: 'status-idle' },
+      connecting: { icon: '◐', class: 'status-connecting' },
+      connected: { icon: '✓', class: 'status-connected' }
+    };
+    
+    const s = states[state] || states.idle;
+    $status.innerHTML = `<span>${s.icon}</span> ${txt}`;
+    $status.className = `status ${s.class}`;
+  }
+
+  // Mode selector
+  function updateModeUI() {
+    const isLan = $modeLan.checked;
+    
+    if (isLan) {
+      $modeBadge.textContent = '🏠 LAN Mode';
+      $modeBadge.className = 'badge badge-lan';
+      $modeHint.innerHTML = '✓ LAN Mode selected: Fast direct connection for devices on the same network';
+      $ipConfig.classList.add('visible');
+    } else {
+      $modeBadge.textContent = '🌐 Internet Mode';
+      $modeBadge.className = 'badge badge-internet';
+      $modeHint.innerHTML = '✓ Internet Mode selected: Stream over public internet with TURN/STUN relay';
+      $ipConfig.classList.remove('visible');
+    }
+  }
+
+  $modeLan.addEventListener('change', updateModeUI);
+  $modeInternet.addEventListener('change', updateModeUI);
+
+  // IP Detection
+  async function detectServerIP() {
+    return new Promise((resolve) => {
+      const tempPc = new RTCPeerConnection({ iceServers: [] });
+      const ips = [];
+      let resolved = false;
+      
+      tempPc.onicecandidate = (e) => {
+        if (resolved) return;
+        
+        if (!e.candidate) {
+          tempPc.close();
+          resolved = true;
+          if (ips.length > 0) {
+            ips.sort((a, b) => {
+              const getSubnet = (ip) => {
+                const parts = ip.split('.');
+                if (parts[0] === '192' && parts[1] === '168') return parseInt(parts[2]);
+                return 999;
+              };
+              return getSubnet(a) - getSubnet(b);
+            });
+            resolve(ips[0]);
+          } else {
+            resolve(null);
+          }
+          return;
+        }
+        
+        const candidate = e.candidate.candidate;
+        if (!candidate.includes('typ host')) return;
+        
+        const match = candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+        if (match && match[1]) {
+          const ip = match[1];
+          const isPrivate = ip.startsWith('192.168.') || ip.startsWith('10.') || 
+                           ip.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./);
+          if (isPrivate && !ips.includes(ip)) {
+            ips.push(ip);
+          }
+        }
+      };
+      
+      tempPc.createDataChannel('');
+      tempPc.createOffer().then(offer => tempPc.setLocalDescription(offer)).catch(() => {});
+      
+      setTimeout(() => { 
+        if (!resolved) {
+          resolved = true;
+          tempPc.close(); 
+          resolve(null); 
+        }
+      }, 2000);
+    });
+  }
+
+  $btnDetectIp.addEventListener('click', async () => {
+    $btnDetectIp.disabled = true;
+    $btnDetectIp.textContent = 'Detecting...';
+    const ip = await detectServerIP();
+    if (ip) {
+      $serverIpInput.value = ip;
+      log('✓ Auto-detected local IP:', ip);
+    } else {
+      log('✗ Could not detect local IP');
+    }
+    $btnDetectIp.disabled = false;
+    $btnDetectIp.textContent = 'Auto-Detect';
+  });
+
+  // SDP/ICE mDNS replacement
+  function replaceMdnsInSdp(sdp, serverIp) {
+    if (!serverIp) return sdp;
+    
+    const lines = sdp.split('\n');
+    const modifiedLines = lines.map(line => {
+      if (line.includes('.local')) {
+        const original = line;
+        const modified = line.replace(/[a-f0-9\-]+\.local/gi, serverIp);
+        if (modified !== original) {
+          log(`   🔄 SDP: Replaced .local → ${serverIp}`);
+        }
+        return modified;
+      }
+      return line;
+    });
+    
+    return modifiedLines.join('\n');
+  }
+
+  function replaceMdnsInCandidate(candidateStr, serverIp) {
+    if (!serverIp || !candidateStr.includes('.local')) return candidateStr;
+    
+    const replaced = candidateStr.replace(/[a-f0-9\-]+\.local/gi, serverIp);
+    if (replaced !== candidateStr) {
+      log(`   🔄 ICE: Replaced .local → ${serverIp}`);
+    }
+    return replaced;
+  }
+
+  // Cleanup functions - IMPROVED
+  function cleanupPC() {
+    if (pc) {
+      log('🧹 Cleaning up PeerConnection...');
+      try { 
+        pc.ontrack = null;
+        pc.onicecandidate = null;
+        pc.onconnectionstatechange = null;
+        pc.onicegatheringstatechange = null;
+        pc.oniceconnectionstatechange = null;
+        pc.close();
+      } catch (e) {
+        log('⚠ Error during PC cleanup:', e.message);
+      }
+      pc = null;
+    }
+    
+    if (remoteStream) {
+      try {
+        remoteStream.getTracks().forEach(track => {
+          track.stop();
+          remoteStream.removeTrack(track);
+        });
+      } catch (e) {}
+      remoteStream = null;
+    }
+    
+    trackReceived = 0;
+    pendingCandidates = [];
+    
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      statsInterval = null;
+    }
+    $statsPanel.classList.remove('visible');
+    
+    $statType.textContent = '—';
+    $statLocalIp.textContent = '—';
+    $statRemoteIp.textContent = '—';
+    $statDataReceived.textContent = '0 MB';
+    $statPacketsLost.textContent = '0';
+    $statConnTime.textContent = '—';
+  }
+
+  function fullCleanup() {
+    log('🧹 Full cleanup initiated');
+    
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+    
+    cleanupPC();
+    
+    try { 
+      $video.pause();
+      $video.srcObject = null;
+    } catch (e) {}
+    
+    if (ws) {
+      try { 
+        ws.onopen = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.close(); 
+      } catch (e) {}
+      ws = null;
+    }
+    
+    myId = null;
+    connectStartTime = null;
+    isConnecting = false;
+  }
+
+  // Statistics monitoring
+  function startStatsMonitoring() {
+    if (!pc || statsInterval) return;
+    
+    statsInterval = setInterval(async () => {
+      if (!pc || pc.connectionState !== 'connected') {
+        if (statsInterval) {
+          clearInterval(statsInterval);
+          statsInterval = null;
+        }
+        return;
+      }
+      
+      try {
+        const stats = await pc.getStats();
+        let localIP = null, remoteIP = null, type = null;
+        let bytesReceived = 0, packetsLost = 0;
+        
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            stats.forEach(r => {
+              if (r.id === report.localCandidateId) {
+                localIP = r.address || r.ip;
+                type = r.candidateType;
+              }
+              if (r.id === report.remoteCandidateId) {
+                remoteIP = r.address || r.ip;
+              }
+            });
+          }
+          
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            bytesReceived = report.bytesReceived || 0;
+            packetsLost = report.packetsLost || 0;
+          }
+        });
+        
+        const typeEmoji = type === 'host' ? '🏠' : type === 'srflx' ? '🌐' : type === 'relay' ? '🔄' : '❓';
+        const typeLabel = type === 'host' ? 'LAN (Direct)' : type === 'srflx' ? 'STUN (Reflexive)' : type === 'relay' ? 'TURN (Relay)' : 'Unknown';
+        
+        $statType.textContent = `${typeEmoji} ${typeLabel}`;
+        $statLocalIp.textContent = localIP || '—';
+        $statRemoteIp.textContent = remoteIP || '—';
+        $statDataReceived.textContent = `${(bytesReceived / 1024 / 1024).toFixed(2)} MB`;
+        $statPacketsLost.textContent = packetsLost.toString();
+        
+        if (connectStartTime) {
+          const elapsed = Date.now() - connectStartTime;
+          const seconds = Math.floor(elapsed / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          $statConnTime.textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        $statsPanel.classList.add('visible');
+      } catch (e) {
+        log('⚠ Stats error:', e.message);
+      }
+    }, 1000);
+  }
+
+  // WebRTC Setup - IMPROVED
+  function setupPeerConnection() {
+    if (pc) {
+      log('⚠ PeerConnection already exists, cleaning up first');
+      cleanupPC();
+    }
+    
+    const internetMode = $modeInternet.checked;
+    
+    const iceConfig = internetMode ? {
+      iceServers: [
+        { urls: "stun:stun.relay.metered.ca:80" },
+        {
+          urls: "turn:global.relay.metered.ca:80",
+          username: "7321ff60cbe4cad66abfbac7",
+          credential: "af44V11U4JE4axiV",
+        },
+        {
+          urls: "turn:global.relay.metered.ca:80?transport=tcp",
+          username: "7321ff60cbe4cad66abfbac7",
+          credential: "af44V11U4JE4axiV",
+        },
+        {
+          urls: "turn:global.relay.metered.ca:443",
+          username: "7321ff60cbe4cad66abfbac7",
+          credential: "af44V11U4JE4axiV",
+        },
+        {
+          urls: "turns:global.relay.metered.ca:443?transport=tcp",
+          username: "7321ff60cbe4cad66abfbac7",
+          credential: "af44V11U4JE4axiV",
+        },
+      ],
+      iceTransportPolicy: 'all',
+      iceCandidatePoolSize: 10
+    } : {
+      iceServers: [],
+      iceCandidatePoolSize: 0
+    };
+    
+    log(`Setting up PeerConnection (${internetMode ? 'Internet with TURN/STUN' : 'LAN-only'})`);
+    
+    try {
+      pc = new RTCPeerConnection(iceConfig);
+      remoteStream = new MediaStream();
+      trackReceived = 0;
+      pendingCandidates = [];
+      $video.srcObject = remoteStream;
+
+      pc.ontrack = (ev) => {
+        trackReceived++;
+        log(`✓ Track received: ${ev.track.kind} (${trackReceived}/2)`);
+        
+        ev.track.onended = () => {
+          log(`⚠ Track ${ev.track.kind} ended`);
+        };
+        
+        remoteStream.addTrack(ev.track);
+        
+        if (trackReceived === 1) {
+          $video.play().catch(e => log('⚠ Play error:', e.message));
+        }
+      };
+
+      pc.onicecandidate = (ev) => {
+        if (!ev.candidate) {
+          log('✓ ICE gathering complete');
+          return;
+        }
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          let candidateStr = ev.candidate.candidate;
+          
+          const isLanMode = $modeLan.checked;
+          const serverIp = $serverIpInput.value.trim();
+          
+          if (isLanMode && serverIp) {
+            candidateStr = replaceMdnsInCandidate(candidateStr, serverIp);
+          }
+          
+          const ipMatch = candidateStr.match(/(\d+\.\d+\.\d+\.\d+)/);
+          const candidateIP = ipMatch ? ipMatch[1] : 'unknown';
+          const isHost = candidateStr.includes('typ host');
+          const isSrflx = candidateStr.includes('typ srflx');
+          const isRelay = candidateStr.includes('typ relay');
+          
+          const type = isHost ? 'host' : isSrflx ? 'srflx' : isRelay ? 'relay' : 'unknown';
+          log(`   → Sending ${type}: ${candidateIP}`);
+          
+          const msg = {
+            type: 'ice-candidate',
+            candidate: {
+              candidate: candidateStr,
+              sdpMLineIndex: ev.candidate.sdpMLineIndex
+            }
+          };
+          ws.send(JSON.stringify(msg));
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        log('Connection state:', pc.connectionState);
+        
+        if (pc.connectionState === 'connected') {
+          const elapsed = Date.now() - connectStartTime;
+          updateStatus(`Connected (${elapsed}ms)`, 'connected');
+          log(`✓✓✓ Connected in ${elapsed}ms ✓✓✓`);
+          isConnecting = false;
+          
+          pc.getStats().then(stats => {
+            let localIP = null, remoteIP = null, type = null;
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                stats.forEach(r => {
+                  if (r.id === report.localCandidateId) {
+                    localIP = r.address || r.ip;
+                    type = r.candidateType;
+                  }
+                  if (r.id === report.remoteCandidateId) {
+                    remoteIP = r.address || r.ip;
+                  }
+                });
+              }
+            });
+            
+            log(`═══════════════════════════════════════`);
+            log(`📊 Connection Details:`);
+            log(`   Local:  ${localIP}`);
+            log(`   Remote: ${remoteIP}`);
+            const typeEmoji = type === 'host' ? '🏠 LAN (direct)' : 
+                             type === 'srflx' ? '🌐 STUN (reflexive)' : 
+                             type === 'relay' ? '🔄 TURN (relay)' : type;
+            log(`   Type:   ${typeEmoji}`);
+            log(`═══════════════════════════════════════`);
+          });
+          
+          startStatsMonitoring();
+          
+        } else if (pc.connectionState === 'failed') {
+          updateStatus('Connection failed', 'idle');
+          log('✗ Connection failed - check network/firewall settings');
+          isConnecting = false;
+          $btnConnect.disabled = false;
+          $btnDisconnect.disabled = true;
+          
+        } else if (pc.connectionState === 'disconnected') {
+          updateStatus('Disconnected', 'idle');
+          log('⚠ Connection disconnected');
+          isConnecting = false;
+          
+        } else if (pc.connectionState === 'connecting') {
+          updateStatus('Connecting...', 'connecting');
+          isConnecting = true;
+          
+        } else if (pc.connectionState === 'closed') {
+          log('Connection closed');
+          isConnecting = false;
+        }
+      };
+
+      pc.onicegatheringstatechange = () => {
+        log('ICE gathering state:', pc.iceGatheringState);
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        log('ICE connection state:', pc.iceConnectionState);
+        
+        if (pc.iceConnectionState === 'failed') {
+          log('✗ ICE connection failed');
+        }
+      };
+
+      return pc;
+      
+    } catch (e) {
+      log('✗ Failed to create PeerConnection:', e.message);
+      cleanupPC();
+      return null;
+    }
+  }
+
+  // WebSocket Connection - IMPROVED
+  function connectWS() {
+    if (isConnecting) {
+      log('⚠ Connection already in progress, ignoring');
+      return;
+    }
+    
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      log('⚠ WebSocket already connected, cleaning up first');
+      fullCleanup();
+      
+      // Wait a bit before reconnecting
+      reconnectTimeout = setTimeout(() => {
+        connectWS();
+      }, 500);
+      return;
+    }
+    
+    if (ws) {
+      try { 
+        ws.close(); 
+      } catch {}
+      ws = null;
+    }
+    
+    isConnecting = true;
+    connectStartTime = Date.now();
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      log('✓ WebSocket connected to server');
+      updateStatus('WebSocket open', 'connecting');
+    };
+
+    ws.onclose = () => {
+      log('WebSocket disconnected');
+      if (isConnecting || (pc && pc.connectionState === 'connected')) {
+        updateStatus('Disconnected', 'idle');
+      }
+      isConnecting = false;
+      $btnConnect.disabled = false;
+      $btnDisconnect.disabled = true;
+    };
+
+    ws.onerror = (err) => {
+      log('✗ WebSocket error:', err.type);
+      isConnecting = false;
+    };
+
+    ws.onmessage = async (ev) => {
+      let data = null;
+      try { 
+        data = JSON.parse(ev.data); 
+      } catch (e) { 
+        log('✗ Failed to parse message:', e.message);
+        return; 
+      }
+
+      switch (data.type) {
+        case 'registered':
+          myId = data.id;
+          log('✓ Registered with ID:', myId);
+          
+          // Clean up any existing connection
+          cleanupPC();
+          try { $video.pause(); } catch {}
+          $video.srcObject = null;
+          
+          // Small delay before setting up new connection
+          await new Promise(r => setTimeout(r, 200));
+          
+          if (!setupPeerConnection()) {
+            log('✗ Failed to setup PeerConnection');
+            isConnecting = false;
+            $btnConnect.disabled = false;
+            $btnDisconnect.disabled = true;
+            return;
+          }
+          
+          // Wait for PC to be ready
+          await new Promise(r => setTimeout(r, 100));
+          
+          const internetMode = $modeInternet.checked;
+          const msg = {
+            type: 'request-offer',
+            internetMode: internetMode
+          };
+          
+          try {
+            ws.send(JSON.stringify(msg));
+            log(`→ Requested offer (${internetMode ? 'Internet' : 'LAN'} mode)`);
+          } catch (e) {
+            log('✗ Failed to send request-offer:', e.message);
+            isConnecting = false;
+          }
+          break;
+
+        case 'offer':
+          log('✓ Offer received from server');
+          
+          if (!pc) {
+            log('⚠ No PeerConnection, creating new one');
+            if (!setupPeerConnection()) {
+              log('✗ Failed to setup PeerConnection');
+              return;
+            }
+          }
+
+          try {
+            let sdpOffer = data.sdp;
+            
+            const isLanMode = $modeLan.checked;
+            const serverIp = $serverIpInput.value.trim();
+            
+            if (isLanMode && serverIp) {
+              log('🔧 Processing SDP to replace mDNS addresses...');
+              sdpOffer = replaceMdnsInSdp(sdpOffer, serverIp);
+            }
+            
+            await pc.setRemoteDescription({ type: 'offer', sdp: sdpOffer });
+            log('✓ Remote description set');
+
+            // Process pending ICE candidates
+            if (pendingCandidates.length > 0) {
+              log(`Processing ${pendingCandidates.length} pending ICE candidates`);
+              for (const c of pendingCandidates) {
+                try { 
+                  await pc.addIceCandidate(c); 
+                } catch (e) {
+                  log('⚠ Failed to add candidate:', e.message);
+                }
+              }
+              pendingCandidates = [];
+            }
+
+            const answer = await pc.createAnswer();
+            
+            let answerSdp = answer.sdp;
+            if (isLanMode && serverIp) {
+              answerSdp = replaceMdnsInSdp(answerSdp, serverIp);
+            }
+            
+            await pc.setLocalDescription({ type: 'answer', sdp: answerSdp });
+            log('✓ Local description set (answer created)');
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ 
+                type: 'answer', 
+                to: data.from, 
+                sdp: answerSdp
+              }));
+              log('→ Answer sent to server');
+            } else {
+              log('✗ WebSocket not open, cannot send answer');
+            }
+            
+          } catch (e) {
+            log('✗ Negotiation error:', e.message);
+            isConnecting = false;
+          }
+          break;
+
+        case 'ice-candidate':
+          if (data.candidate && data.candidate.candidate) {
+            let candidateStr = data.candidate.candidate;
+            
+            const isLanMode = $modeLan.checked;
+            const serverIp = $serverIpInput.value.trim();
+            
+            if (isLanMode && serverIp) {
+              candidateStr = replaceMdnsInCandidate(candidateStr, serverIp);
+            }
+            
+            const candidate = {
+              candidate: candidateStr,
+              sdpMLineIndex: data.candidate.sdpMLineIndex,
+              sdpMid: data.candidate.sdpMid
+            };
+            
+            if (pc && pc.remoteDescription) {
+              try { 
+                await pc.addIceCandidate(candidate);
+              } catch (e) {
+                log('⚠ Failed to add ICE candidate:', e.message);
+              }
+            } else {
+              pendingCandidates.push(candidate);
+              log('Queued ICE candidate (waiting for remote description)');
+            }
+          }
+          break;
+          
+        default:
+          log('⚠ Unknown message type:', data.type);
+      }
+    };
+  }
+
+  // Button handlers - IMPROVED
+  $btnConnect.addEventListener('click', () => {
+    if (isConnecting) {
+      log('⚠ Connection already in progress');
+      return;
+    }
+    
+    const internetMode = $modeInternet.checked;
+    const serverIp = $serverIpInput.value.trim();
+    
+    log('═══════════════════════════════════════');
+    log(`🎯 Starting connection in ${internetMode ? 'INTERNET' : 'LAN'} mode`);
+    
+    if (internetMode) {
+      log('   • Using TURN/STUN relay servers');
+      log('   • Works across different networks');
+      log('   • Supports NAT/firewall traversal');
+    } else {
+      log('   • Direct LAN connection');
+      log('   • No external servers required');
+      log('   • Fastest performance');
+      log('   • Same network only');
+      
+      if (serverIp) {
+        log(`   • mDNS fix enabled: .local → ${serverIp}`);
+      } else {
+        log('   ⚠ No server IP set - Safari/iOS may use .local');
+      }
+    }
+    log('═══════════════════════════════════════');
+    
+    fullCleanup();
+    
+    // Small delay before connecting
+    setTimeout(() => {
+      connectWS();
+      updateStatus('Connecting...', 'connecting');
+      $btnConnect.disabled = true;
+      $btnDisconnect.disabled = false;
+    }, 100);
+  });
+
+  $btnDisconnect.addEventListener('click', () => {
+    if (!isConnecting && (!pc || pc.connectionState !== 'connected')) {
+      log('⚠ Not connected');
+      return;
+    }
+    
+    log('═══════════════════════════════════════');
+    log('User disconnected');
+    log('═══════════════════════════════════════');
+    
+    fullCleanup();
+    updateStatus('Disconnected', 'idle');
+    $btnConnect.disabled = false;
+    $btnDisconnect.disabled = true;
+  });
+
+  // Prevent multiple clicks
+  $btnConnect.addEventListener('click', (e) => {
+    if (isConnecting) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  // Initialize
+  updateModeUI();
+  
+  // Auto-detect IP on load
+  detectServerIP().then(ip => {
+    if (ip) {
+      $serverIpInput.value = ip;
+      log('✓ Auto-detected local IP:', ip);
+    }
+  });
+  
+  log('Adaptive WebRTC Viewer ready');
+  log('Select connection mode and click Connect to start');
+})();
+</script>
+</body>
+</html>
